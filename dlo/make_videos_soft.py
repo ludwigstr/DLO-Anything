@@ -68,6 +68,7 @@ def main():
     ap.add_argument("--solo", action="store_true", help="show the --token pair only")
     ap.add_argument("--plain", action="store_true", help="no legend and no force arrows (tiles of a grid video)")
     ap.add_argument("--zoom", type=float, default=1.0, help="camera closer by this factor (> 1: closer than the automatic framing)")
+    ap.add_argument("--margin", type=float, default=None, help="free border as share of the half image (default: room for the legend); 0.12 fills the frame (grid tiles)")
     args = ap.parse_args()
     legend = (LEGEND[0], (f"DLO-Anything {args.name_a}", COL_INDEP), (f"DLO-Anything {args.name_b}", COL_COUPLED)) + LEGEND[3:] + ((f"Cable contact in the model (predicted cables closer than {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
                                                                                                                  (f"Floor contact in the model (predicted node lower than {MODEL_FLOOR * 1000:.0f} mm)", COL_MODEL_FLOOR))
@@ -102,7 +103,7 @@ def main():
         viz.r.scene.flags[mujoco.mjtRndFlag.mjRND_REFLECTION] = False
         ax = d["anchor_b"][e][:2] - pose[1, 0, :2]; ax = ax / np.linalg.norm(ax)
         viz.cam.azimuth, viz.cam.elevation = np.degrees(np.arctan2(ax[0], -ax[1])) + 35, -22
-        look, dist = camera_path(viz, pos[:1] if single else pos, half_window=25, smooth=41, margin=1 - np.sqrt(CABLE_AREA)); dist = dist / args.zoom
+        look, dist = camera_path(viz, pos[:1] if single else pos, half_window=25, smooth=41, margin=1 - np.sqrt(CABLE_AREA) if args.margin is None else args.margin); dist = dist / args.zoom
         tan_half = np.tan(np.deg2rad(float(sim.model.vis.global_.fovy)) / 2)
         hidden = viz.rgba_cable.copy(); hidden[:, 3] = 0.0
         sim.model.geom_rgba[viz.geoms] = hidden
