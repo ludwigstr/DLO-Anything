@@ -15,7 +15,7 @@ DLO="__init__ config cable_env two_cable_env u_env generate_data generate_u gene
      contact_model soft_contact train_chain onestep make_videos make_videos_two make_videos_overlay
      make_videos_force make_videos_soft
      couple contact_data force_model"                       # last line: modules imported by the ones above
-SCRIPTS="pipeline_onestep.sh gen.sh wrap.py make_motion_sets.py make_u3.py eval_h.py eval_motion.py diag_contact.py diag_memo.py diag_noise.py"
+SCRIPTS="pipeline_onestep.sh gen.sh wrap.py make_motion_sets.py make_grid.py make_u3.py eval_h.py eval_motion.py diag_contact.py diag_memo.py diag_noise.py"
 
 # absolute paths of the working tree become relative paths
 strip_abs() { sed -i -E 's#/home/[A-Za-z0-9_.-]+/Python/DLOanything_fs/?##g' "$1"; }

@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--device", default="cuda:0")
     ap.add_argument("--name-a", default="without contact tokens", help="label of the --ohne pair"); ap.add_argument("--name-b", default="with soft-contact tokens", help="label of the --token pair")
     ap.add_argument("--solo", action="store_true", help="show the --token pair only")
+    ap.add_argument("--plain", action="store_true", help="no legend and no force arrows (tiles of a grid video)")
     ap.add_argument("--zoom", type=float, default=1.0, help="camera closer by this factor (> 1: closer than the automatic framing)")
     args = ap.parse_args()
     legend = (LEGEND[0], (f"DLO-Anything {args.name_a}", COL_INDEP), (f"DLO-Anything {args.name_b}", COL_COUPLED)) + LEGEND[3:] + ((f"Cable contact in the model (predicted cables closer than {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
@@ -146,7 +147,7 @@ def main():
             m = _soft((d_sim < d_empty - 1e-4).astype(np.float32)) * (1.0 - _soft((d_pred < d_empty - 1e-4).astype(np.float32)))
             a = (SIM_ALPHA * m)[..., None]
             img = (1 - a) * img + a * (np.asarray(COL_SIM_SOLID[:3], np.float32) * 255)
-            img = draw_arrows(img.clip(0, 255).astype(np.uint8), arrows, proj, mpp, afont)
+            img = img.clip(0, 255).astype(np.uint8) if args.plain else draw_arrows(img.clip(0, 255).astype(np.uint8), arrows, proj, mpp, afont)
             if started:
                 st = f"Vorhersage seit {(t - ds.K + 1) * cfg.control_dt:4.2f} s, ohne Rückgriff auf die Simulation"
                 er = ("" if single else f"Kabelkraft auf das U in der Simulation: {ft.sum() * 1000:4.0f} mN   Kontaktstellen: {len(sim_pts)}   (Kontakt wandert in dieser Szene {wander:.2f} m)\n") + \
@@ -156,7 +157,7 @@ def main():
                 st, er = f"Kontext wird gesammelt ({t + 1}/{ds.K} Schritte)", ("" if single else "Kabelkraft auf das U: noch keine Vorhersage\nKontakt im Modell: noch keine Vorhersage\n") + "Mittlerer Fehler: noch keine Vorhersage"
             info = [f"t = {t * cfg.control_dt:5.2f} s   Trajektorie {d['mode'][e]}   " + st] + er.split("\n") + [
                     (f"nur das gezogene Kabel (kein Kabelkontakt): L {mats[0]['length']:.2f} m, bend {mats[0]['bend']:.1e}, dens {mats[0]['density']:.0f}" if single else "") or f"U-Kabel: L {mats[1]['length']:.2f} m, bend {mats[1]['bend']:.1e}, dens {mats[1]['density']:.0f}   |   gezogenes Kabel: L {mats[0]['length']:.2f} m, bend {mats[0]['bend']:.1e}, dens {mats[0]['density']:.0f}"]
-            frames.append(add_legend(img, lfont, legend))      # no header and no status line: the image fills the whole frame
+            frames.append(img if args.plain else add_legend(img, lfont, legend))      # no header and no status line: the image fills the whole frame
         viz.r.close()
         path = os.path.join(args.out, f"episode_{e:03d}.mp4")
         imageio.mimwrite(path, frames, fps=args.fps, codec="libx264", quality=8, macro_block_size=1)
