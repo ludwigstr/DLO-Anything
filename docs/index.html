@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DLO-Anything</title>
+<meta name="description" content="DLO-Anything: a material-conditioned physics transformer that forecasts the motion of cables in contact with each other and with the floor.">
+<meta name="author" content="Ludwig Streloke">
+<meta name="color-scheme" content="light dark">
+<style>
+  :root {
+    --bg: #fbfbf9;
+    --surface: #ffffff;
+    --text: #1c1f23;
+    --muted: #5b626b;
+    --line: #dcdfe3;
+    --accent: #1f4e8c;
+    --note-bg: #f1f4f8;
+    --sim: #2b2f36;
+    --sim-ring: #9aa1ab;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --surface: #1b1e23;
+      --text: #e6e8eb;
+      --muted: #a0a7b1;
+      --line: #30353d;
+      --accent: #8fb8f0;
+      --note-bg: #20252c;
+      --sim: #0b0c0e;
+      --sim-ring: #7c848f;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 20px 64px; }
+  .text { max-width: 720px; margin-left: auto; margin-right: auto; }
+  header { text-align: center; padding: 56px 0 28px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); line-height: 1.1; margin: 0 0 10px; font-weight: 600; letter-spacing: -0.01em; }
+  .subtitle { font-size: clamp(1.05rem, 2.6vw, 1.3rem); color: var(--muted); margin: 0 auto 26px; max-width: 34em; text-wrap: balance; }
+  .author { margin: 0; font-size: 1.1rem; }
+  .affil { margin: 4px auto 0; color: var(--muted); font-size: 0.95rem; max-width: 36em; text-wrap: balance; }
+  .affil a { color: inherit; }
+  .links { margin: 24px 0 0; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .button {
+    display: inline-block; padding: 9px 20px; border: 1px solid var(--accent); border-radius: 4px;
+    color: var(--accent); text-decoration: none;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 0.95rem; font-weight: 600;
+  }
+  .button:hover, .button:focus-visible { background: var(--accent); color: var(--bg); }
+  .status {
+    display: inline-block; margin: 0 0 18px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--muted); font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  section { padding-top: 44px; }
+  h2 { font-size: 1.5rem; font-weight: 600; margin: 0 0 14px; line-height: 1.25; }
+  h2.wide { max-width: 720px; margin-left: auto; margin-right: auto; }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+  ul.plain { margin: 0 0 16px; padding-left: 1.2em; }
+  ul.plain li { margin-bottom: 6px; }
+  .tokens {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;
+    margin: 18px 0 20px; padding: 0; list-style: none;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 0.9rem;
+  }
+  .tokens li { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; }
+  .tokens b { display: block; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+  .tokens span { color: var(--muted); }
+  .note {
+    background: var(--note-bg); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 0 0 20px;
+    font-size: 0.95rem;
+  }
+  .videos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 20px; margin: 24px 0 0; }
+  figure { margin: 0; }
+  figure.lead { grid-column: 1 / -1; }
+  video {
+    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: #000;
+    border: 1px solid var(--line); border-radius: 4px;
+  }
+  figcaption { margin-top: 8px; font-size: 0.92rem; line-height: 1.45; color: var(--muted); }
+  figcaption b { color: var(--text); font-weight: 600; }
+  .legend {
+    list-style: none; margin: 0 0 20px; padding: 14px 16px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 4px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; font-size: 0.92rem; line-height: 1.4;
+  }
+  .legend li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; }
+  .swatch { width: 30px; height: 12px; border-radius: 6px; margin-top: 5px; }
+  .swatch.sim { background: var(--sim); box-shadow: 0 0 0 1px var(--sim-ring); }
+  .swatch.model { background: #f28c1e; }
+  .swatch.c-sim { background: #2fa84f; }
+  .swatch.f-sim { background: #e8c41a; }
+  .swatch.c-model { background: #d91abf; }
+  .swatch.f-model { background: #1fc4d6; }
+  footer {
+    max-width: 1040px; margin: 0 auto; padding: 24px 20px 48px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 0.88rem; text-align: center;
+  }
+  @media (max-width: 700px) {
+    body { font-size: 17px; }
+    header { padding-top: 40px; }
+    .videos, .legend { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="status">Work in progress</span>
+  <h1>DLO-Anything</h1>
+  <p class="subtitle">A material-conditioned physics transformer that forecasts cables in contact</p>
+  <p class="author">Ludwig Streloke</p>
+  <p class="affil">Institute for Factory Automation and Production Systems (FAPS),<br>
+    Friedrich-Alexander-Universität Erlangen-Nürnberg<br>
+    <a href="mailto:ludwig.streloke@faps.fau.de">ludwig.streloke@faps.fau.de</a></p>
+  <p class="links">
+    <a class="button" href="#">Code on GitHub</a><!-- REPO_URL -->
+  </p>
+</header>
+
+<section class="text" id="summary">
+  <h2>Summary</h2>
+  <p>DLO-Anything forecasts the motion of cables (deformable linear objects) that touch each other and the floor.
+  The test scene is simulated in MuJoCo: a robot gripper pulls one cable across a second cable that hangs as a
+  fixed "U"; each cable has 40 segments. A physics transformer with about 5.2&nbsp;M parameters, one model per
+  cable and conditioned on the material parameters of its cable, predicts the next 20&nbsp;ms; a forecast is a
+  rollout of this single step. The models are trained on 24,000 simulated scenes and validated on robot motions of
+  kinds that never occur in training. This is work in progress: the model and the results are still changing.</p>
+</section>
+
+<section class="text" id="method">
+  <h2>Method</h2>
+  <p><b>One-step forecast.</b> Each cable has its own transformer. From the last states of its cable, the
+  material parameters and the next step of the gripper, the model predicts the cable 20&nbsp;ms later. The
+  prediction is fed back as the new state, so a 6-s forecast consists of 300 such steps and uses the simulation
+  only for its 0.2&nbsp;s of starting context.</p>
+  <p><b>Contact tokens.</b> Before every step, each cable node receives two additional tokens:</p>
+  <ul class="plain">
+    <li>a <b>soft-contact token</b> that describes the closest point on the other cable, and</li>
+    <li>a <b>rigid-contact token</b> that describes the floor patch below the node.</li>
+  </ul>
+  <p>Both are rebuilt from the predicted state, not from the simulation. The model therefore reacts to the contact
+  that its own forecast produces.</p>
+  <ul class="tokens" aria-label="Tokens per pass">
+    <li><b>41</b><span>node tokens</span></li>
+    <li><b>6</b><span>material tokens</span></li>
+    <li><b>1</b><span>action token</span></li>
+    <li><b>41</b><span>soft-contact tokens</span></li>
+    <li><b>41</b><span>rigid-contact tokens</span></li>
+    <li><b>1</b><span>global token</span></li>
+  </ul>
+  <p><b>Training data.</b> 24,000 simulated scenes in which the gripper crosses the U on straight, angled, arc,
+  S-curve and there-and-back paths or follows random waypoints. Scenes in which the pulled cable wraps around the
+  U are excluded.</p>
+  <p><b>Metric.</b> Mean node position error of a 6-s forecast started from 0.2&nbsp;s of simulated context.</p>
+</section>
+
+<section id="validation">
+  <h2 class="wide">Validation on unseen robot motions</h2>
+  <div class="text">
+    <p>The validation set contains three kinds of robot motion that are never used for training: circles, sine
+    oscillations and jerky start-stop motions (303 scenes; a separate test set has 341 scenes). The trainer
+    aborts if a training file contains scenes of these kinds. The five videos below are scenes from this
+    validation set.</p>
+
+    <!-- MODEL_NOTE -->
+    <p class="note" id="model-note">The videos in this version were rendered with the 0.5-s-per-pass model
+    variant. They will be replaced by videos of the one-step model.</p>
+    <!-- /MODEL_NOTE -->
+
+    <ul class="legend" aria-label="Legend of the video overlay">
+      <li><span class="swatch sim"></span><span><b>Dark band:</b> simulation.</span></li>
+      <li><span class="swatch model"></span><span><b>Orange:</b> model forecast. It is one continuous forecast
+        over the whole episode and is never reset to the simulation.</span></li>
+      <li><span class="swatch c-sim"></span><span><b>Green:</b> cable-cable contact in the simulation, with force
+        arrow.</span></li>
+      <li><span class="swatch f-sim"></span><span><b>Yellow:</b> floor contact in the simulation.</span></li>
+      <li><span class="swatch c-model"></span><span><b>Magenta:</b> cable-cable contact in the model (predicted
+        cables closer than 10&nbsp;mm).</span></li>
+      <li><span class="swatch f-model"></span><span><b>Cyan:</b> floor contact in the model (predicted node below
+        8&nbsp;mm).</span></li>
+    </ul>
+  </div>
+
+  <div class="videos">
+    <figure class="lead">
+      <video controls muted loop playsinline preload="metadata" src="videos/sine_1.mp4"></video>
+      <figcaption><b>Sine motion, hard.</b> The gripper crosses the U with a sideways oscillation. The contact
+        between the cables wanders about 1.6&nbsp;m along the cables.</figcaption>
+    </figure>
+    <figure>
+      <video controls muted loop playsinline preload="metadata" src="videos/sine_2.mp4"></video>
+      <figcaption><b>Sine motion, easier.</b> The contact between the cables wanders less.</figcaption>
+    </figure>
+    <figure>
+      <video controls muted loop playsinline preload="metadata" src="videos/circle.mp4"></video>
+      <figcaption><b>Circle motion.</b> The cables do not touch each other in this scene; the pulled cable
+        slides over the floor.</figcaption>
+    </figure>
+    <figure>
+      <video controls muted loop playsinline preload="metadata" src="videos/jerk_1.mp4"></video>
+      <figcaption><b>Jerky start-stop motion.</b> Many short moves of the gripper that start and stop
+        abruptly.</figcaption>
+    </figure>
+    <figure>
+      <video controls muted loop playsinline preload="metadata" src="videos/jerk_2.mp4"></video>
+      <figcaption><b>Jerky start-stop motion, brief contacts.</b> The cables touch each other only for short
+        moments.</figcaption>
+    </figure>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Ludwig Streloke · Institute for Factory Automation and Production Systems (FAPS),
+  Friedrich-Alexander-Universität Erlangen-Nürnberg
+</footer>
+</body>
+</html>
