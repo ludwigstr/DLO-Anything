@@ -20,9 +20,9 @@ from .make_videos_two import TwoViz
 from .soft_contact import SceneWindows, closest_on_cable, load, rollout
 from .two_cable_env import TwoCableSim
 
-LEGEND = (("Simulation (dunkles Band)", COL_SIM), ("DLO-Anything ohne Kontakt-Token", COL_INDEP), ("DLO-Anything mit Soft-Contact-Token", COL_COUPLED),
-          ("Kabelkontakt in der Simulation (Pfeil: Kraft auf das U)", [c / 255 for c in A_SIM_CABLE] + [1]),
-          ("Bodenkontakt in der Simulation (Pfeil: Bodenkraft)", COL_FLOOR_SIM))
+LEGEND = (("Simulation (dark band)", COL_SIM), ("DLO-Anything without contact tokens", COL_INDEP), ("DLO-Anything with soft-contact tokens", COL_COUPLED),
+          ("Cable contact in the simulation (arrow: force on the U)", [c / 255 for c in A_SIM_CABLE] + [1]),
+          ("Floor contact in the simulation (arrow: floor force)", COL_FLOOR_SIM))
 
 
 COL_MODEL_CONTACT = [0.85, 0.10, 0.75, 0.95]      # where the predicted cables touch: this is the contact the model works with
@@ -64,11 +64,11 @@ def main():
     ap.add_argument("--index", required=True)
     ap.add_argument("--fps", type=int, default=15); ap.add_argument("--width", type=int, default=1600); ap.add_argument("--height", type=int, default=900)
     ap.add_argument("--device", default="cuda:0")
-    ap.add_argument("--name-a", default="ohne Kontakt-Token", help="label of the --ohne pair"); ap.add_argument("--name-b", default="mit Soft-Contact-Token", help="label of the --token pair")
+    ap.add_argument("--name-a", default="without contact tokens", help="label of the --ohne pair"); ap.add_argument("--name-b", default="with soft-contact tokens", help="label of the --token pair")
     ap.add_argument("--solo", action="store_true", help="show the --token pair only")
     args = ap.parse_args()
-    legend = (LEGEND[0], (f"DLO-Anything {args.name_a}", COL_INDEP), (f"DLO-Anything {args.name_b}", COL_COUPLED)) + LEGEND[3:] + ((f"Kabelkontakt im Modell (vorhergesagte Kabel näher als {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
-                                                                                                                 (f"Bodenkontakt im Modell (vorhergesagter Knoten tiefer als {MODEL_FLOOR * 1000:.0f} mm)", COL_MODEL_FLOOR))
+    legend = (LEGEND[0], (f"DLO-Anything {args.name_a}", COL_INDEP), (f"DLO-Anything {args.name_b}", COL_COUPLED)) + LEGEND[3:] + ((f"Cable contact in the model (predicted cables closer than {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
+                                                                                                                 (f"Floor contact in the model (predicted node lower than {MODEL_FLOOR * 1000:.0f} mm)", COL_MODEL_FLOOR))
     if args.solo: legend = legend[:1] + legend[2:]
     device = torch.device(args.device)
     m_tok = [load(p, device)[0] for p in args.token.split(",")]; m_ohne = [load(p, device)[0] for p in args.ohne.split(",")]; mcfg = m_tok[0].cfg

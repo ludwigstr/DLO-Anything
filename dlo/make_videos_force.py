@@ -75,7 +75,7 @@ def force_runs(nodes, force, thr):
     out = []
     for r in np.split(idx, np.where(np.diff(idx) > 1)[0] + 1):
         top = r[np.argmax(mag[r])]; tot = np.linalg.norm(force[r].sum(0)) * 1000
-        out += [(nodes[i], force[i], (f"{tot:.0f} mN" if len(r) == 1 else f"Summe {tot:.0f} mN") if i == top else None) for i in r]
+        out += [(nodes[i], force[i], (f"{tot:.0f} mN" if len(r) == 1 else f"total {tot:.0f} mN") if i == top else None) for i in r]
     return out
 
 

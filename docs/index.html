@@ -128,6 +128,12 @@
   </p>
 </header>
 
+<section class="text" id="abstract">
+  <h2>Abstract</h2>
+  <p>Predicting the dynamics of deformable linear objects (DLOs), such as cables and wires, remains challenging due to variations in physical properties and complex contact interactions. Existing physics-based and learned models often require object-specific calibration or adaptation, limiting their generalization across different cables and manipulation scenarios. This paper introduces DLO-Anything, a framework towards a foundation model for DLO dynamics. The concept combines cable states, material properties, robot actions, and potential interactions with rigid and deformable objects within a unified, physics-conditioned transformer architecture. Rigid- and soft-contact tokens are designed to capture environmental interactions directly, without requiring a separate contact-force estimation model. We present a conceptual implementation and a scalable simulation-based training pipeline that generates diverse cable dynamics data across material properties, robot trajectories, and contact scenarios.</p>
+  <p>An empirical scaling study investigates the effects of training data and model capacity on prediction accuracy. Using a model with 25.9 million parameters, we achieve a mean node error of 0.60&nbsp;cm for two-second predictions across a broad range of cable properties. Prediction error decreases with increasing training data following a saturating power-law relationship. The model also supports inverse parameter identification, reducing prediction error for previously unseen cables from 2.46&nbsp;cm to 0.72&nbsp;cm after 2.2&nbsp;s of observation. Soft-contact tokens enable prediction of interacting cables with a mean error of 1.78&nbsp;cm over continuous eight-second trajectories, without explicit contact-force estimation. These results provide initial evidence for scalable, physics-conditioned DLO dynamics modeling and highlight the remaining challenges towards a general-purpose foundation model, particularly contact-rich generalization and transfer to real-world scenarios.</p>
+</section>
+
 <section id="videos">
   <!-- MODEL_NOTE: videos rendered with the 0.5-s-per-pass model variant -->
   <div class="videos">
@@ -139,11 +145,6 @@
   </div>
 </section>
 
-<section class="text" id="abstract">
-  <h2>Abstract</h2>
-  <p>Predicting the dynamics of deformable linear objects (DLOs), such as cables and wires, remains challenging due to variations in physical properties and complex contact interactions. Existing physics-based and learned models often require object-specific calibration or adaptation, limiting their generalization across different cables and manipulation scenarios. This paper introduces DLO-Anything, a framework towards a foundation model for DLO dynamics. The concept combines cable states, material properties, robot actions, and potential interactions with rigid and deformable objects within a unified, physics-conditioned transformer architecture. Rigid- and soft-contact tokens are designed to capture environmental interactions directly, without requiring a separate contact-force estimation model. We present a conceptual implementation and a scalable simulation-based training pipeline that generates diverse cable dynamics data across material properties, robot trajectories, and contact scenarios.</p>
-  <p>An empirical scaling study investigates the effects of training data and model capacity on prediction accuracy. Using a model with 25.9 million parameters, we achieve a mean node error of 0.60&nbsp;cm for two-second predictions across a broad range of cable properties. Prediction error decreases with increasing training data following a saturating power-law relationship. The model also supports inverse parameter identification, reducing prediction error for previously unseen cables from 2.46&nbsp;cm to 0.72&nbsp;cm after 2.2&nbsp;s of observation. Soft-contact tokens enable prediction of interacting cables with a mean error of 1.78&nbsp;cm over continuous eight-second trajectories, without explicit contact-force estimation. These results provide initial evidence for scalable, physics-conditioned DLO dynamics modeling and highlight the remaining challenges towards a general-purpose foundation model, particularly contact-rich generalization and transfer to real-world scenarios.</p>
-</section>
 
 </main>
 </body>
