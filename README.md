@@ -6,7 +6,7 @@ A material-conditioned physics transformer that forecasts the motion of cables (
 in contact with each other and with the floor.
 
 **Authors:** Ludwig Streloke (a, corresponding author, <ludwig.streloke@faps.fau.de>), Matthias Lang (a),
-Christopher Straub (b), Annalena Hartmann (a), Jörg Franke (a)
+Alexander Weilacher (a), Christopher Straub (b), Annalena Hartmann (a), Jörg Franke (a)
 
 (a) Friedrich-Alexander-Universität Erlangen-Nürnberg, Institute for Factory Automation and Production Systems (FAPS)\
 (b) Fraunhofer Institute for Integrated Systems and Device Technology (IISB)
