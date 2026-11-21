@@ -1,4 +1,4 @@
-# DLO-Anything
+# DLO-Anything: Towards a Foundation Model for Deformable Linear Objects
 
 Project page with videos: https://ludwigstr.github.io/DLO-Anything/
 
