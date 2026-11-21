@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DLO-Anything</title>
-<meta name="description" content="DLO-Anything: a material-conditioned physics transformer that forecasts the motion of cables in contact with each other and with the floor.">
-<meta name="author" content="Ludwig Streloke">
+<meta name="description" content="DLO-Anything: a framework towards a foundation model for the dynamics of deformable linear objects such as cables and wires.">
+<meta name="author" content="Ludwig Streloke, Matthias Lang, Christopher Straub, Annalena Hartmann, J&ouml;rg Franke">
 <meta name="color-scheme" content="light dark">
 <style>
   :root {
@@ -118,115 +118,33 @@
 <main>
 
 <header>
-  <span class="status">Work in progress</span>
   <h1>DLO-Anything</h1>
-  <p class="subtitle">A material-conditioned physics transformer that forecasts cables in contact</p>
-  <p class="author">Ludwig Streloke</p>
-  <p class="affil">Institute for Factory Automation and Production Systems (FAPS),<br>
-    Friedrich-Alexander-Universität Erlangen-Nürnberg<br>
-    <a href="mailto:ludwig.streloke@faps.fau.de">ludwig.streloke@faps.fau.de</a></p>
+  <p class="author">Ludwig Streloke<sup>a,*</sup>, Matthias Lang<sup>a</sup>, Christopher Straub<sup>b</sup>, Annalena Hartmann<sup>a</sup>, J&ouml;rg Franke<sup>a</sup></p>
+  <p class="affil"><sup>a</sup> Friedrich-Alexander-Universit&auml;t Erlangen-N&uuml;rnberg, Institute for Factory Automation and Production Systems (FAPS), Egerlandstra&szlig;e 7-9, Erlangen 91058, Germany</p>
+  <p class="affil"><sup>b</sup> Fraunhofer Institute for Integrated Systems and Device Technology (IISB), Schottkystra&szlig;e 10, Erlangen 91058, Germany</p>
+  <p class="affil"><sup>*</sup> Corresponding author: <a href="mailto:ludwig.streloke@faps.fau.de">ludwig.streloke@faps.fau.de</a></p>
   <p class="links">
     <a class="button" href="https://github.com/ludwigstr/DLO-Anything">Code on GitHub</a><!-- REPO_URL -->
   </p>
 </header>
 
-<section class="text" id="summary">
-  <h2>Summary</h2>
-  <p>DLO-Anything forecasts the motion of cables (deformable linear objects) that touch each other and the floor.
-  The test scene is simulated in MuJoCo: a robot gripper pulls one cable across a second cable that hangs as a
-  fixed "U"; each cable has 40 segments. A physics transformer with about 5.2&nbsp;M parameters, one model per
-  cable and conditioned on the material parameters of its cable, predicts the next 20&nbsp;ms; a forecast is a
-  rollout of this single step. The models are trained on 24,000 simulated scenes and validated on robot motions of
-  kinds that never occur in training. This is work in progress: the model and the results are still changing.</p>
-</section>
-
-<section class="text" id="method">
-  <h2>Method</h2>
-  <p><b>One-step forecast.</b> Each cable has its own transformer. From the last states of its cable, the
-  material parameters and the next step of the gripper, the model predicts the cable 20&nbsp;ms later. The
-  prediction is fed back as the new state, so a 6-s forecast consists of 300 such steps and uses the simulation
-  only for its 0.2&nbsp;s of starting context.</p>
-  <p><b>Contact tokens.</b> Before every step, each cable node receives two additional tokens:</p>
-  <ul class="plain">
-    <li>a <b>soft-contact token</b> that describes the closest point on the other cable, and</li>
-    <li>a <b>rigid-contact token</b> that describes the floor patch below the node.</li>
-  </ul>
-  <p>Both are rebuilt from the predicted state, not from the simulation. The model therefore reacts to the contact
-  that its own forecast produces.</p>
-  <ul class="tokens" aria-label="Tokens per pass">
-    <li><b>41</b><span>node tokens</span></li>
-    <li><b>6</b><span>material tokens</span></li>
-    <li><b>1</b><span>action token</span></li>
-    <li><b>41</b><span>soft-contact tokens</span></li>
-    <li><b>41</b><span>rigid-contact tokens</span></li>
-    <li><b>1</b><span>global token</span></li>
-  </ul>
-  <p><b>Training data.</b> 24,000 simulated scenes in which the gripper crosses the U on straight, angled, arc,
-  S-curve and there-and-back paths or follows random waypoints. Scenes in which the pulled cable wraps around the
-  U are excluded.</p>
-  <p><b>Metric.</b> Mean node position error of a 6-s forecast started from 0.2&nbsp;s of simulated context.</p>
-</section>
-
-<section id="validation">
-  <h2 class="wide">Validation on unseen robot motions</h2>
-  <div class="text">
-    <p>The validation set contains three kinds of robot motion that are never used for training: circles, sine
-    oscillations and jerky start-stop motions (303 scenes; a separate test set has 341 scenes). The trainer
-    aborts if a training file contains scenes of these kinds. The five videos below are scenes from this
-    validation set.</p>
-
-    <!-- MODEL_NOTE -->
-    <p class="note" id="model-note">The videos in this version were rendered with the 0.5-s-per-pass model
-    variant. They will be replaced by videos of the one-step model.</p>
-    <!-- /MODEL_NOTE -->
-
-    <ul class="legend" aria-label="Legend of the video overlay">
-      <li><span class="swatch sim"></span><span><b>Dark band:</b> simulation.</span></li>
-      <li><span class="swatch model"></span><span><b>Orange:</b> model forecast. It is one continuous forecast
-        over the whole episode and is never reset to the simulation.</span></li>
-      <li><span class="swatch c-sim"></span><span><b>Green:</b> cable-cable contact in the simulation, with force
-        arrow.</span></li>
-      <li><span class="swatch f-sim"></span><span><b>Yellow:</b> floor contact in the simulation.</span></li>
-      <li><span class="swatch c-model"></span><span><b>Magenta:</b> cable-cable contact in the model (predicted
-        cables closer than 10&nbsp;mm).</span></li>
-      <li><span class="swatch f-model"></span><span><b>Cyan:</b> floor contact in the model (predicted node below
-        8&nbsp;mm).</span></li>
-    </ul>
-  </div>
-
+<section id="videos">
+  <!-- MODEL_NOTE: videos rendered with the 0.5-s-per-pass model variant -->
   <div class="videos">
-    <figure class="lead">
-      <video controls muted loop playsinline preload="metadata" src="videos/sine_1.mp4"></video>
-      <figcaption><b>Sine motion, hard.</b> The gripper crosses the U with a sideways oscillation. The contact
-        between the cables wanders about 1.6&nbsp;m along the cables.</figcaption>
-    </figure>
-    <figure>
-      <video controls muted loop playsinline preload="metadata" src="videos/sine_2.mp4"></video>
-      <figcaption><b>Sine motion, easier.</b> The contact between the cables wanders less.</figcaption>
-    </figure>
-    <figure>
-      <video controls muted loop playsinline preload="metadata" src="videos/circle.mp4"></video>
-      <figcaption><b>Circle motion.</b> The cables do not touch each other in this scene; the pulled cable
-        slides over the floor.</figcaption>
-    </figure>
-    <figure>
-      <video controls muted loop playsinline preload="metadata" src="videos/jerk_1.mp4"></video>
-      <figcaption><b>Jerky start-stop motion.</b> Many short moves of the gripper that start and stop
-        abruptly.</figcaption>
-    </figure>
-    <figure>
-      <video controls muted loop playsinline preload="metadata" src="videos/jerk_2.mp4"></video>
-      <figcaption><b>Jerky start-stop motion, brief contacts.</b> The cables touch each other only for short
-        moments.</figcaption>
-    </figure>
+    <figure><video controls muted loop playsinline preload="metadata" src="videos/circle.mp4"></video></figure>
+    <figure><video controls muted loop playsinline preload="metadata" src="videos/sine_1.mp4"></video></figure>
+    <figure><video controls muted loop playsinline preload="metadata" src="videos/sine_2.mp4"></video></figure>
+    <figure><video controls muted loop playsinline preload="metadata" src="videos/jerk_1.mp4"></video></figure>
+    <figure class="lead"><video controls muted loop playsinline preload="metadata" src="videos/jerk_2.mp4"></video></figure>
   </div>
+</section>
+
+<section class="text" id="abstract">
+  <h2>Abstract</h2>
+  <p>Predicting the dynamics of deformable linear objects (DLOs), such as cables and wires, remains challenging due to variations in physical properties and complex contact interactions. Existing physics-based and learned models often require object-specific calibration or adaptation, limiting their generalization across different cables and manipulation scenarios. This paper introduces DLO-Anything, a framework towards a foundation model for DLO dynamics. The concept combines cable states, material properties, robot actions, and potential interactions with rigid and deformable objects within a unified, physics-conditioned transformer architecture. Rigid- and soft-contact tokens are designed to capture environmental interactions directly, without requiring a separate contact-force estimation model. We present a conceptual implementation and a scalable simulation-based training pipeline that generates diverse cable dynamics data across material properties, robot trajectories, and contact scenarios.</p>
+  <p>An empirical scaling study investigates the effects of training data and model capacity on prediction accuracy. Using a model with 25.9 million parameters, we achieve a mean node error of 0.60&nbsp;cm for two-second predictions across a broad range of cable properties. Prediction error decreases with increasing training data following a saturating power-law relationship. The model also supports inverse parameter identification, reducing prediction error for previously unseen cables from 2.46&nbsp;cm to 0.72&nbsp;cm after 2.2&nbsp;s of observation. Soft-contact tokens enable prediction of interacting cables with a mean error of 1.78&nbsp;cm over continuous eight-second trajectories, without explicit contact-force estimation. These results provide initial evidence for scalable, physics-conditioned DLO dynamics modeling and highlight the remaining challenges towards a general-purpose foundation model, particularly contact-rich generalization and transfer to real-world scenarios.</p>
 </section>
 
 </main>
-
-<footer>
-  Ludwig Streloke · Institute for Factory Automation and Production Systems (FAPS),
-  Friedrich-Alexander-Universität Erlangen-Nürnberg
-</footer>
 </body>
 </html>

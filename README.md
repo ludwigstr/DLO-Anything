@@ -5,8 +5,11 @@ Project page with videos: https://ludwigstr.github.io/DLO-Anything/
 A material-conditioned physics transformer that forecasts the motion of cables (deformable linear objects, DLOs)
 in contact with each other and with the floor.
 
-**Author:** Ludwig Streloke, Institute for Factory Automation and Production Systems (FAPS),
-Friedrich-Alexander-Universität Erlangen-Nürnberg — <ludwig.streloke@faps.fau.de>
+**Authors:** Ludwig Streloke (a, corresponding author, <ludwig.streloke@faps.fau.de>), Matthias Lang (a),
+Christopher Straub (b), Annalena Hartmann (a), Jörg Franke (a)
+
+(a) Friedrich-Alexander-Universität Erlangen-Nürnberg, Institute for Factory Automation and Production Systems (FAPS)\
+(b) Fraunhofer Institute for Integrated Systems and Device Technology (IISB)
 
 **Status:** work in progress. The code and the results are still changing.
 
@@ -219,4 +222,4 @@ adaptations of the scripts (default `PROJECT_DIR`: two levels up).
 
 ## License
 
-License: to be added by the authors.
+MIT License, see [LICENSE](LICENSE).
