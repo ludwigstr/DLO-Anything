@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DLO-Anything: Towards a Foundation Model for Deformable Linear Objects</title>
-<meta name="description" content="DLO-Anything: a framework towards a foundation model for the dynamics of deformable linear objects such as cables and wires.">
+<meta name="description" content="DLO-Anything: a framework toward a foundation model for the dynamics of deformable linear objects such as cables and wires.">
 <meta name="author" content="Ludwig Streloke, Matthias Lang, Alexander Weilacher, Christopher Straub, Annalena Hartmann, J&ouml;rg Franke">
 <meta name="color-scheme" content="light dark">
 <style>
@@ -130,18 +130,17 @@
 
 <section class="text" id="abstract">
   <h2>Abstract</h2>
-  <p>Predicting the dynamics of deformable linear objects (DLOs), such as cables and wires, remains challenging due to variations in physical properties and complex contact interactions. Existing physics-based and learned models often require object-specific calibration or adaptation, limiting their generalization across different cables and manipulation scenarios. This paper introduces DLO-Anything, a framework towards a foundation model for DLO dynamics. The concept combines cable states, material properties, robot actions, and potential interactions with rigid and deformable objects within a unified, physics-conditioned transformer architecture. Rigid- and soft-contact tokens are designed to capture environmental interactions directly, without requiring a separate contact-force estimation model. We present a conceptual implementation and a scalable simulation-based training pipeline that generates diverse cable dynamics data across material properties, robot trajectories, and contact scenarios.</p>
-  <p>An empirical scaling study investigates the effects of training data and model capacity on prediction accuracy. Using a model with 25.9 million parameters, we achieve a mean node error of 0.60&nbsp;cm for two-second predictions across a broad range of cable properties. Prediction error decreases with increasing training data following a saturating power-law relationship. The model also supports inverse parameter identification, reducing prediction error for previously unseen cables from 2.46&nbsp;cm to 0.72&nbsp;cm after 2.2&nbsp;s of observation. Soft-contact tokens enable prediction of interacting cables with a mean error of 1.78&nbsp;cm over continuous eight-second trajectories, without explicit contact-force estimation. These results provide initial evidence for scalable, physics-conditioned DLO dynamics modeling and highlight the remaining challenges towards a general-purpose foundation model, particularly contact-rich generalization and transfer to real-world scenarios.</p>
+  <p>Predicting the dynamics of deformable linear objects (DLOs), such as cables and wires, remains challenging due to variations in physical properties and complex contact interactions. Existing physics-based and learned models often require object-specific calibration or adaptation, limiting their generalization across different cables and manipulation scenarios. This paper introduces DLO-Anything, a framework toward a foundation model for DLO dynamics. The concept combines cable states, material properties, robot actions, and potential interactions with rigid and deformable objects within a unified, physics-conditioned transformer architecture. Rigid- and soft-contact tokens are designed to capture environmental interactions directly. We present an implementation for two interacting cables, with 5.2 million parameters per cable model, and a simulation-based training pipeline for diverse cable dynamics data.</p>
+  <p>An empirical scaling study investigates how the volume and the diversity of the training data determine prediction accuracy. The central finding is a scaling law for generalization to unseen robot motions: the prediction error decreases with the number of training scenes only down to a floor, and this floor is set by the diversity of the robot motions in the training data, following a power law. With the same number of scenes, eight motion kinds instead of one reduce the error of six-second predictions by 30&nbsp;%, and every doubling of the number of motion kinds reduces it by about 10&nbsp;%. Consequently, diversity outweighs volume: a training set with eight motion kinds yields a 22&nbsp;% lower error than a set of a single kind that is eight times larger. These results provide initial evidence for scalable, physics-conditioned DLO dynamics modeling and highlight the remaining challenges toward a general-purpose foundation model, particularly diversity beyond robot motions and transfer to real-world scenarios.</p>
 </section>
 
 <section id="videos">
-  <!-- MODEL_NOTE: videos rendered with the 0.5-s-per-pass model variant -->
   <div class="videos">
-    <figure><video autoplay muted loop playsinline preload="auto" src="videos/grid_test.mp4"></video>
+    <figure><video autoplay muted loop playsinline preload="auto" src="videos/grid_test.mp4?v=3"></video>
       <figcaption>25 randomly selected scenes of the test set (circle, sine and jerk robot motions, never used for training): simulation (dark) and model forecast (orange).</figcaption></figure>
-    <figure><video autoplay muted loop playsinline preload="auto" src="videos/circle.mp4"></video></figure>
-    <figure><video autoplay muted loop playsinline preload="auto" src="videos/sine_1.mp4"></video></figure>
-    <figure><video autoplay muted loop playsinline preload="auto" src="videos/jerk_2.mp4"></video></figure>
+    <figure><video autoplay muted loop playsinline preload="auto" src="videos/circle.mp4?v=3"></video></figure>
+    <figure><video autoplay muted loop playsinline preload="auto" src="videos/sine_1.mp4?v=3"></video></figure>
+    <figure><video autoplay muted loop playsinline preload="auto" src="videos/jerk_2.mp4?v=3"></video></figure>
   </div>
 </section>
 
