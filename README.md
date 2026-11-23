@@ -20,7 +20,7 @@ simulation again after its 0.2 s of context.
 | File | Purpose |
 |---|---|
 | `simulate.py` | MuJoCo scenes: training sets A to F and the held-out validation / test scenes |
-| `model.py` | configuration, token construction, transformer (imported by the other scripts) |
+| `model.py` | model configuration, material normalization, token construction, transformer (imported by the other scripts) |
 | `train.py` | two-stage training of the two cable models |
 | `evaluate.py` | 6-s forecast error of a model pair; fit of the scaling law |
 | `make_videos.py` | videos of simulation and forecast, grid video |

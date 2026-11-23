@@ -20,8 +20,8 @@ import torch
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
-from simulate import CableSim, TwoCableSim
-from model import SceneWindows, SimConfig, closest_on_cable, load, material_dict, rollout
+from simulate import CableSim, SimConfig, TwoCableSim
+from model import SceneWindows, closest_on_cable, load, material_dict, rollout
 
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"

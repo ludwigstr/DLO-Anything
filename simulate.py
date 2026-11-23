@@ -24,8 +24,73 @@ import mujoco
 import numpy as np
 import time
 import torch
+from dataclasses import dataclass
 from multiprocessing import Pool
-from model import SimConfig, closest_on_cable, material_to_vec, sample_material
+from model import MATERIAL_NAMES, MATERIAL_RANGES, closest_on_cable
+
+
+@dataclass
+class SimConfig:
+    # Cable geometry
+    n_segments: int = 40          # cable segments
+    cable_length: float = 1.3153  # [m]
+    cable_radius: float = 0.003   # [m]
+    gripper_height: float = 0.5   # [m] fixed height of the hand above the plane
+    # Integration
+    timestep: float = 0.002       # physics step [s]
+    integrator: str = "Euler"     # MuJoCo integrator
+    control_dt: float = 0.02      # control / data step [s]  (10 physics steps)
+    # Workspace (gripper xy is kept inside a square of this half-size)
+    workspace: float = 1.2        # [m]
+    # Random trajectory: long straight moves between random waypoints
+    max_speed: float = 1.0        # [m/s] cruise speed is uniform in [min_speed, max_speed]
+    min_speed: float = 0.4        # [m/s]
+    min_move: float = 1.2         # [m] minimum length of one straight move
+    ramp_time: float = 0.6        # [s] cosine acceleration / deceleration ramp
+    max_pause: float = 0.6        # [s] random pause between moves (uniform in [0, max_pause])
+    # Trajectory style: "long" = long straight moves, "diverse" = short moves with frequent
+    # direction changes (test videos), "varied" = every move has a random length between short and
+    # long, "mix" = one of the three per episode. The per-episode trajectory parameters (speed
+    # range, move lengths, ramps, pauses, turn angle) are themselves sampled from the ranges below.
+    style: str = "long"
+    speed_lo_range: tuple = (0.1, 0.5)      # [m/s] lower end of the per-episode cruise-speed range
+    speed_hi_range: tuple = (0.6, 1.6)      # [m/s] upper end
+    long_min_move_range: tuple = (0.5, 1.6) # [m] minimum move length of the long style
+    long_ramp_range: tuple = (0.2, 1.0)     # [s]
+    long_pause_range: tuple = (0.0, 1.2)    # [s] maximum pause
+    div_move_range: tuple = (0.03, 0.8)     # [m] per-episode move-length range is drawn inside this
+    div_ramp_range: tuple = (0.06, 0.4)     # [s]
+    div_pause_range: tuple = (0.0, 0.5)     # [s] maximum pause
+    div_turn_range: tuple = (40.0, 180.0)   # [deg] maximum direction change per move
+    var_move_range: tuple = (0.03, 2.0)     # [m] per-move length of the varied style
+    use_yaw: bool = False         # the hand is a point constraint (connect), so yaw has no effect
+    max_yaw_rate: float = 2.0     # [rad/s] (only used for action scaling)
+    # Episode
+    episode_steps: int = 400      # control steps (8 s at 50 Hz)
+    settle_steps: int = 150       # control steps with the hand at rest before recording starts (cable falls onto the plane)
+
+    @property
+    def n_nodes(self) -> int:
+        return self.n_segments + 1
+
+    @property
+    def substeps(self) -> int:
+        return int(round(self.control_dt / self.timestep))
+
+
+def sample_material(rng: np.random.Generator) -> dict:
+    out = {}
+    for k in MATERIAL_NAMES:
+        lo, hi, kind = MATERIAL_RANGES[k]
+        if kind == "log":
+            out[k] = float(np.exp(rng.uniform(np.log(lo), np.log(hi))))
+        else:
+            out[k] = float(rng.uniform(lo, hi))
+    return out
+
+
+def material_to_vec(mat: dict) -> np.ndarray:
+    return np.array([mat[k] for k in MATERIAL_NAMES], dtype=np.float32)
 
 
 def yaw_to_quat(yaw: float) -> np.ndarray:
