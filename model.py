@@ -52,26 +52,13 @@ def rot2(yaw):
     return np.array([[c, -s], [s, c]])
 
 
-def to_gripper_frame(pos, pose0):
-    """pos (..., 3) world -> frame of gripper pose0 = (x, y, yaw). z unchanged."""
-    out = np.array(pos, dtype=np.float32, copy=True)
-    out[..., :2] = (out[..., :2] - pose0[:2]) @ rot2(pose0[2])   # == R^T @ (p - t)
-    return out
-
-
 def make_sample(pos, pose, action, material, t0, K, H):
-    """Build one model input/target from an episode.
+    """Action and material tokens of one cable for the prediction that starts after step t0.
 
-    pos (T, N, 3), pose (T, 3), action (T, 3), material (6,)
-    context = steps t0-K+1 .. t0, target = steps t0+1 .. t0+H, actions = action[t0 .. t0+H-1]
+    pose (T, 3), action (T, 3), material (6,); actions = action[t0 .. t0+H-1]
     Everything is expressed in the gripper frame at t0.
     """
     pose0 = pose[t0]
-    ctx = to_gripper_frame(pos[t0 - K + 1:t0 + 1], pose0)            # (K, N, 3)
-    vel = np.diff(ctx, axis=0, prepend=ctx[:1])                        # (K, N, 3)
-    node_feat = np.concatenate([ctx * POS_SCALE, vel * VEL_SCALE], -1)  # (K, N, 6)
-    node_feat = node_feat.transpose(1, 0, 2).reshape(pos.shape[1], K * 6)
-
     R = rot2(pose0[2])
     act = np.array(action[t0:t0 + H], dtype=np.float32, copy=True)     # (H, 3)
     act[:, :2] = act[:, :2] @ R                                         # rotate dx,dy into frame
@@ -81,14 +68,9 @@ def make_sample(pos, pose, action, material, t0, K, H):
     act_feat = np.concatenate([act * ACT_SCALE, rel_xy * POS_SCALE,
                                np.sin(rel_yaw)[:, None], np.cos(rel_yaw)[:, None]], -1)  # (H, 7)
 
-    target = to_gripper_frame(pos[t0 + 1:t0 + H + 1], pose0) * POS_SCALE   # (H, N, 3)
-    cur = ctx[-1] * POS_SCALE                                              # (N, 3)
     return dict(
-        node=torch.from_numpy(node_feat.astype(np.float32)),
         act=torch.from_numpy(act_feat.astype(np.float32)),
         mat=torch.from_numpy(normalize_material(material)),
-        cur=torch.from_numpy(cur.astype(np.float32)),
-        target=torch.from_numpy(target.astype(np.float32)),
     )
 
 
@@ -270,22 +252,6 @@ def frames(ctx, pose0):
     return to_frame(ctx - t, yaw), to_frame(ctx.flip(1) - t, yaw)
 
 
-def contact_tokens(ctx, pose0, mat, fixed):
-    """ctx (B,2,K,N,3) world, pose0 (B,2,3), mat (B,2,M) normalised, fixed (B,2) -> (B,2,N,contact_in)."""
-    B, C, K, N, _ = ctx.shape
-    own, par = frames(ctx.float(), pose0.float())
-    vel = torch.diff(par, dim=2, prepend=par[:, :, :1])
-    q, arc, gap, i, ti = closest_on_cable(par[:, :, -1], own[:, :, -1])
-    v_own = own[:, :, -1] - own[:, :, -2]                                   # (B,2,N,3)
-    take = lambda idx: v_own.gather(2, idx[..., None].expand(-1, -1, -1, 3))
-    v_q = take(i) * (1 - ti[..., None]) + take(i + 1) * ti[..., None]
-    soft = torch.stack([torch.exp(-gap / s) for s in SOFT_SCALES], -1)
-    hist = lambda x: x.permute(0, 1, 3, 2, 4).reshape(B, C, N, K * 3)
-    return torch.cat([hist(par) * POS_SCALE, hist(vel) * VEL_SCALE, (q - par[:, :, -1]) * POS_SCALE, (2 * arc - 1)[..., None], soft,
-                      (v_q - vel[:, :, -1]) * VEL_SCALE, mat.flip(1)[:, :, None].expand(-1, -1, N, -1),
-                      fixed.flip(1)[:, :, None, None].expand(-1, -1, N, 1).to(par.dtype)], -1)
-
-
 def partner_actions(pose0, pose_fut):
     """Planned hand motion of the partner in the own frame, same 7 features as the own action tokens."""
     p0, pf = pose0.flip(1), pose_fut.flip(1)                                # partner (B,2,3), (B,2,H,3)
@@ -314,9 +280,7 @@ def predict(models, ctx, b, use_contact=True, cables=(0, 1), amp=None):
     glob = torch.zeros(*b["fixed"].shape, 3, device=ctx.device); glob[..., 0] = b["fixed"]
     tok = actp = None
     if use_contact and any(models[c].cfg.contact_in for c in cables):
-        first = next(models[c] for c in cables if models[c].cfg.contact_in)
-        make = own_contact_tokens if first.cfg.contact_in == own_in(first.cfg) else contact_tokens
-        tok = make(ctx, b["pose0"], b["mat"], b["fixed"]); actp = partner_actions(b["pose0"], b["pose_fut"])
+        tok = own_contact_tokens(ctx, b["pose0"], b["mat"], b["fixed"]); actp = partner_actions(b["pose0"], b["pose_fut"])
     out, rig = [], None
     for c in cables:
         kw = dict(contact=tok[:, c], act_partner=actp[:, c]) if tok is not None and models[c].cfg.contact_in else {}
