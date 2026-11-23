@@ -76,6 +76,7 @@ class SimConfig:
     def substeps(self) -> int:
         return int(round(self.control_dt / self.timestep))
 
+
 # Material parameter ranges (sampled log-uniformly for stiffness/density, uniformly otherwise).
 # Names are the order used in the data arrays and in the model's material tokens.
 MATERIAL_NAMES = ["bend", "twist", "damping", "density", "length", "height"]
@@ -87,6 +88,23 @@ MATERIAL_RANGES = {
     "length":   (0.6, 2.0, "lin"),    # cable length [m]; 40 segments always
     "height":   (0.2, 0.9, "lin"),    # hand height above the plane [m]
 }
+RGBA = ["0 0 1 1", "0 0.65 0.1 1"]
+U_MODES = ["straight", "angled", "arc", "s_curve", "there_back"]
+SETTLE_STEPS = 200
+SETTLE_VEL_SCALE = 0.9
+# Stiff cable contact: with the MuJoCo defaults the cables pass through each other under load
+# (centre lines closer than 1 mm). With these values they stay about one diameter apart.
+GEOM_ATTRS = 'solref="0.004 1" solimp="0.98 0.995 0.0005 0.5 2" margin="0.001"'
+FREE_SHARE = 0.2      # share of episodes in which cable 1 swings freely in the air, away from the U
+SMOOTH = ["spline", "varspeed", "retrace", "curl", "weave"]     # further training motions (never circle, sine or jerk: those stay validation / test)
+A_TAN, A_LAT = 4.0, 6.0        # [m/s^2] limits of the smooth families along and across the curve (the jerk motions reach 60 m/s^2)
+MOTION = ["circle", "sine", "jerk"]
+KINDS = ["designed", "random", "spline", "varspeed", "retrace", "curl", "weave", "burst"]     # training kinds in the order of the sets A to F
+HELD_OUT = ["circle", "sine", "jerk"]                                                          # validation and test only
+SETS = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 8}                                        # set -> number of kinds
+MAX_WINDING = 360.0                                                                            # [deg] more is a wrap around the U
+CFG = SimConfig()
+CFG.style = "mix"
 
 
 def sample_material(rng: np.random.Generator) -> dict:
@@ -240,9 +258,6 @@ class CableSim:
         if not np.all(np.isfinite(d.qpos)) or not np.all(np.isfinite(d.qvel)):
             return False
         return bool(np.abs(d.xpos).max() < 5.0 and np.abs(d.qvel).max() < 1e4)
-
-
-RGBA = ["0 0 1 1", "0 0.65 0.1 1"]
 
 
 def build_xml2(cfg: SimConfig, mats: list[dict], start_xy=((0.0, 0.0), (0.0, 0.0)), vertices=None, flat=(False, False),
@@ -419,14 +434,6 @@ class TwoCableSim:
         return force, contacts
 
 
-U_MODES = ["straight", "angled", "arc", "s_curve", "there_back"]
-SETTLE_STEPS = 200
-SETTLE_VEL_SCALE = 0.9
-# Stiff cable contact: with the MuJoCo defaults the cables pass through each other under load
-# (centre lines closer than 1 mm). With these values they stay about one diameter apart.
-GEOM_ATTRS = 'solref="0.004 1" solimp="0.98 0.995 0.0005 0.5 2" margin="0.001"'
-
-
 def catenary(span: float, length: float, n: int):
     """Equal-arc-length points (x along the span from 0 to span, z <= 0) of a catenary, and its sag."""
     lo, hi = 1e-3, 1e3
@@ -578,8 +585,6 @@ def run_episode_u(cfg: SimConfig, mats, g, traj1, away, record_frames=None):
         out["frames"] = frames
     return out, sim
 
-FREE_SHARE = 0.2      # share of episodes in which cable 1 swings freely in the air, away from the U
-
 
 def free_trajectory(cfg: SimConfig, g, L1, rng, n_steps):
     """Hand path far from the U with sharp starts, stops and turns: only the cable's inertia shapes it."""
@@ -683,9 +688,6 @@ def _path(fam, g, rng, side):
         return [line(pts[i], pts[i + 1]) for i in range(len(pts) - 1)], (0.15, 1.0), (0.0, 1.5)
     raise ValueError(fam)
 
-SMOOTH = ["spline", "varspeed", "retrace", "curl", "weave"]     # further training motions (never circle, sine or jerk: those stay validation / test)
-A_TAN, A_LAT = 4.0, 6.0        # [m/s^2] limits of the smooth families along and across the curve (the jerk motions reach 60 m/s^2)
-
 
 def _smooth(fam, g, rng, cfg):
     """Gripper positions (T, 2) in U coordinates on a smooth random curve through 4-8 waypoints around the U.
@@ -758,8 +760,6 @@ def _burst(g, rng, cfg):
         seq.append(np.repeat(seq[-1][-1:], int(round(rng.uniform(0.04, 0.4) / dt)), axis=0)); cur = seq[-1][-1] if len(seq[-1]) else seq[-2][-1]
     return np.concatenate(seq)[:T]
 
-MOTION = ["circle", "sine", "jerk"]
-
 
 def _motion(fam, g, rng, side, cfg):
     """Gripper positions (T,2) in U coordinates for the motion families, sampled directly in time."""
@@ -822,14 +822,6 @@ def sample(cfg, rng, fam):
     if fam == "random":                                   # cable starts pointing away from the centre of the U
         v = xy[0] - g["centre"]; away = v / (np.linalg.norm(v) + 1e-9)
     return mats, g, np.column_stack([xy, np.zeros(n)]), away
-
-
-KINDS = ["designed", "random", "spline", "varspeed", "retrace", "curl", "weave", "burst"]     # training kinds in the order of the sets A to F
-HELD_OUT = ["circle", "sine", "jerk"]                                                          # validation and test only
-SETS = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 8}                                        # set -> number of kinds
-MAX_WINDING = 360.0                                                                            # [deg] more is a wrap around the U
-CFG = SimConfig()
-CFG.style = "mix"
 
 
 def scene(job):

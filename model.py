@@ -40,6 +40,10 @@ ACT_SCALE = np.array([1 / (_cfg.max_speed * _cfg.control_dt),
                       1 / (_cfg.max_speed * _cfg.control_dt),
                       1 / (_cfg.max_yaw_rate * _cfg.control_dt)], np.float32)
 VEL_SCALE = 1 / (_cfg.max_speed * _cfg.control_dt)
+SOFT_SCALES = (0.02, 0.10, 0.40)       # [m] length scales of the soft contact activation
+RIGID_SCALES = (0.005, 0.02, 0.10)     # [m] length scales of the proximity to a rigid surface
+FLOOR_REST = 0.004                     # [m] height of a node centre that lies on the floor
+FLOOR_FRICTION = 1.0                   # MuJoCo default sliding friction of the plane
 
 
 def rot2(yaw):
@@ -173,12 +177,6 @@ def to_frame(v, yaw):
 def from_frame(v, yaw):
     c, s = torch.cos(yaw), torch.sin(yaw)
     return torch.stack([c * v[..., 0] - s * v[..., 1], s * v[..., 0] + c * v[..., 1], v[..., 2]], -1)
-
-
-SOFT_SCALES = (0.02, 0.10, 0.40)       # [m] length scales of the soft contact activation
-RIGID_SCALES = (0.005, 0.02, 0.10)     # [m] length scales of the proximity to a rigid surface
-FLOOR_REST = 0.004                     # [m] height of a node centre that lies on the floor
-FLOOR_FRICTION = 1.0                   # MuJoCo default sliding friction of the plane
 
 
 def own_in(mcfg: ModelConfig) -> int:

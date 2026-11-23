@@ -26,6 +26,33 @@ from model import SceneWindows, closest_on_cable, load, rollout
 
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 FONT_B = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
+COL_PRED = ([0.95, 0.35, 0.1, 1.0], [0.95, 0.80, 0.1, 1.0])     # prediction cable 1 (orange), cable 2 (yellow)
+COL_CONTACT = [0.9, 0.05, 0.05, 1.0]
+COL_COUPLED = [0.95, 0.35, 0.10, 1.0]
+# simulation as a dark band, forecasts thick and opaque
+COL_SIM_SOLID = [0.10, 0.10, 0.14, 1.0]
+SIM_ALPHA = 0.85
+COL_SIM = COL_SIM_SOLID[:3] + [SIM_ALPHA]
+COL_SIM_CONTACT = [0.10, 0.70, 0.35, 0.30]
+COL_FLOOR_SIM = [0.98, 0.78, 0.05, 0.9]     # floor contact in the simulation: yellow disc on the floor
+FLOOR_THR = 1e-3                            # [N] per node
+# widths in pixels (half-widths), converted to metres per frame from the camera distance
+PX_SIM, PX_INDEP, PX_COUPLED, PX_CONTACT, PX_FLOOR = 9.0, 2.6, 3.2, 13.0, 5.0
+CABLE_AREA = 0.25   # share of the image the cables occupy (half width x half height)
+ARROW_PX = 100.0    # arrow length in pixels per 100 mN (in the image plane), one arrow per node
+ARROW_MAX = 0.3     # [N] longer arrows are capped (the label still shows the true sum)
+ARROW_MIN = 0.002   # [N] no arrow below
+A_SIM_CABLE, A_EST_CABLE = (10, 120, 60), (200, 20, 30)
+A_SIM_FLOOR, A_EST_FLOOR = (170, 120, 0), (120, 40, 190)
+COL_MODEL_CONTACT = [0.85, 0.10, 0.75, 0.95]      # where the predicted cables touch: this is the contact the model works with
+MODEL_GAP = 0.01                                  # [m] centre distance below which the predicted cables count as touching (simulation: about 0.6-0.9 cm)
+COL_MODEL_FLOOR = [0.05, 0.75, 0.95, 0.95]        # floor contact in the model: predicted node rests on the floor
+MODEL_FLOOR = 0.008                               # [m] height of a predicted node centre below which it counts as lying on the floor (simulation: 4 mm)
+LEGEND = (("Simulation (dark band)", COL_SIM), ("DLO-Anything forecast", COL_COUPLED),
+          ("Cable contact in the simulation (arrow: force on the U)", [c / 255 for c in A_SIM_CABLE] + [1]),
+          ("Floor contact in the simulation (arrow: floor force)", COL_FLOOR_SIM),
+          (f"Cable contact in the model (predicted cables closer than {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
+          (f"Floor contact in the model (predicted node lower than {MODEL_FLOOR * 1000:.0f} mm)", COL_MODEL_FLOOR))
 
 
 class Viz:
@@ -100,10 +127,6 @@ class Viz:
         return self.r.render()
 
 
-COL_PRED = ([0.95, 0.35, 0.1, 1.0], [0.95, 0.80, 0.1, 1.0])     # prediction cable 1 (orange), cable 2 (yellow)
-COL_CONTACT = [0.9, 0.05, 0.05, 1.0]
-
-
 class TwoViz(Viz):
     def __init__(self, sim: TwoCableSim, width=960, height=540):
         self.sim = sim
@@ -138,9 +161,6 @@ class TwoViz(Viz):
             for p in contact_pts:
                 self._add_sphere(p, COL_CONTACT)
         return self.r.render()
-
-
-COL_COUPLED = [0.95, 0.35, 0.10, 1.0]
 
 
 def sim_contact_points(nodes, force):
@@ -188,15 +208,6 @@ def add_legend(img, font, legend):
     return np.asarray(im.convert("RGB"))
 
 
-# simulation as a dark band, forecasts thick and opaque
-COL_SIM_SOLID = [0.10, 0.10, 0.14, 1.0]
-SIM_ALPHA = 0.85
-COL_SIM = COL_SIM_SOLID[:3] + [SIM_ALPHA]
-COL_SIM_CONTACT = [0.10, 0.70, 0.35, 0.30]
-COL_FLOOR_SIM = [0.98, 0.78, 0.05, 0.9]     # floor contact in the simulation: yellow disc on the floor
-FLOOR_THR = 1e-3                            # [N] per node
-
-
 def add_disc(viz, p, rgba, radius):
     scn = viz.r.scene
     if scn.ngeom >= scn.maxgeom:
@@ -206,21 +217,11 @@ def add_disc(viz, p, rgba, radius):
                         np.eye(3).flatten(), np.asarray(rgba, np.float32))
     scn.ngeom += 1
 
-# widths in pixels (half-widths), converted to metres per frame from the camera distance
-PX_SIM, PX_INDEP, PX_COUPLED, PX_CONTACT, PX_FLOOR = 9.0, 2.6, 3.2, 13.0, 5.0
-CABLE_AREA = 0.25   # share of the image the cables occupy (half width x half height)
-
 
 def _soft(m):
     """3x3 box blur of a mask, for anti-aliased edges."""
     p = np.pad(m, 1, mode="edge")
     return sum(p[i:i + m.shape[0], j:j + m.shape[1]] for i in range(3) for j in range(3)) / 9.0
-
-ARROW_PX = 100.0    # arrow length in pixels per 100 mN (in the image plane), one arrow per node
-ARROW_MAX = 0.3     # [N] longer arrows are capped (the label still shows the true sum)
-ARROW_MIN = 0.002   # [N] no arrow below
-A_SIM_CABLE, A_EST_CABLE = (10, 120, 60), (200, 20, 30)
-A_SIM_FLOOR, A_EST_FLOOR = (170, 120, 0), (120, 40, 190)
 
 
 def force_runs(nodes, force, thr):
@@ -282,10 +283,6 @@ def draw_arrows(img, arrows, proj, mpp, font):
     return np.asarray(im)
 
 
-COL_MODEL_CONTACT = [0.85, 0.10, 0.75, 0.95]      # where the predicted cables touch: this is the contact the model works with
-MODEL_GAP = 0.01                                  # [m] centre distance below which the predicted cables count as touching (simulation: about 0.6-0.9 cm)
-
-
 def model_contacts(a, b, th=MODEL_GAP):
     """Points where the predicted cables a, b (N,3) are closer than th, and their smallest centre distance.
     The contact tokens are computed from exactly these predicted positions (closest point on the other cable per node)."""
@@ -294,9 +291,6 @@ def model_contacts(a, b, th=MODEL_GAP):
     q, _, gap, _, _ = closest_on_cable(torch.from_numpy(pts).float(), torch.from_numpy(b).float())
     gap, q = gap.numpy(), q.numpy()
     return merge_points((0.5 * (pts + q))[gap < th], cell=0.015), float(gap.min())
-
-COL_MODEL_FLOOR = [0.05, 0.75, 0.95, 0.95]        # floor contact in the model: predicted node rests on the floor
-MODEL_FLOOR = 0.008                               # [m] height of a predicted node centre below which it counts as lying on the floor (simulation: 4 mm)
 
 
 def add_floor_disc(viz, p, rgba, radius):
@@ -307,13 +301,6 @@ def add_floor_disc(viz, p, rgba, radius):
     mujoco.mjv_initGeom(scn.geoms[scn.ngeom], mujoco.mjtGeom.mjGEOM_CYLINDER, np.array([radius, radius, 0.0005]), np.array([p[0], p[1], 0.0018]),
                         np.eye(3).flatten(), np.asarray(rgba, np.float32))
     scn.ngeom += 1
-
-
-LEGEND = (("Simulation (dark band)", COL_SIM), ("DLO-Anything forecast", COL_COUPLED),
-          ("Cable contact in the simulation (arrow: force on the U)", [c / 255 for c in A_SIM_CABLE] + [1]),
-          ("Floor contact in the simulation (arrow: floor force)", COL_FLOOR_SIM),
-          (f"Cable contact in the model (predicted cables closer than {MODEL_GAP * 1000:.0f} mm)", COL_MODEL_CONTACT),
-          (f"Floor contact in the model (predicted node lower than {MODEL_FLOOR * 1000:.0f} mm)", COL_MODEL_FLOOR))
 
 
 def render(args):
