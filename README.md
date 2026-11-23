@@ -1,31 +1,6 @@
 # DLO-Anything: Towards a Foundation Model for Deformable Linear Objects
 
-Project page with videos: https://ludwigstr.github.io/DLO-Anything/
-
-**Authors:** Ludwig Streloke (a, corresponding author, <ludwig.streloke@faps.fau.de>), Matthias Lang (a),
-Alexander Weilacher (a), Christopher Straub (b), Annalena Hartmann (a), Jörg Franke (a)
-
-(a) Friedrich-Alexander-Universität Erlangen-Nürnberg, Institute for Factory Automation and Production Systems (FAPS)\
-(b) Fraunhofer Institute for Integrated Systems and Device Technology (IISB)
-
-A physics-conditioned transformer that forecasts the motion of cables (deformable linear objects, DLOs) in contact
-with each other and with the floor. A robot pulls one cable across a second cable that is fixed at both ends.
-Each cable has its own model with 5.2 million parameters. The inputs are tokens for the cable nodes, the material,
-the planned gripper motion, and one rigid-contact and one soft-contact token per node (closest point on the floor
-and on the other cable). One pass predicts 0.5 s; a 6-s forecast chains twelve passes and never looks at the
-simulation again after its 0.2 s of context.
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `simulate.py` | MuJoCo scenes and material ranges: training sets A to F and the held-out validation / test scenes |
-| `model.py` | model configuration, token construction, transformer (imported by the other scripts) |
-| `train.py` | two-stage training of the two cable models |
-| `evaluate.py` | 6-s forecast error of a model pair; fit of the scaling law |
-| `make_videos.py` | videos of simulation and forecast, grid video |
-
-The project page is in `docs/`.
+Project page with abstract and videos: https://ludwigstr.github.io/DLO-Anything/
 
 ## Setup
 
@@ -35,80 +10,57 @@ Python 3.11, PyTorch 2 with CUDA, MuJoCo 3.
 pip install -r requirements.txt
 ```
 
-Rendering is headless (`MUJOCO_GL=egl` is set by the scripts if the variable is not set). The videos use the
-DejaVu Sans Mono fonts from `/usr/share/fonts/truetype/dejavu/`.
+## Scripts
 
-## Usage
+Run the scripts from the repository root, in this order. Each one lists its options with `--help`.
+
+### 1. `simulate.py`: create the scenes
 
 ```bash
-# 1. data: a training set, a small set of trained motions for checkpoint selection, held-out validation and test
-python simulate.py --set F --scenes 12000 --slim --out data/F_12000.npz --seed 1000000
-python simulate.py --set A --scenes 300 --out data/val_designed.npz --seed 2000000
-python simulate.py --held-out --scenes 300 --out data/val.npz  --seed 3000000
-python simulate.py --held-out --scenes 340 --out data/test.npz --seed 4000000
+python simulate.py --set F --scenes 12000 --slim --out data/train.npz --seed 1000000    # training set
+python simulate.py --set A --scenes 300 --out data/val_designed.npz --seed 2000000      # for checkpoint selection
+python simulate.py --held-out --scenes 300 --out data/val.npz  --seed 3000000           # validation
+python simulate.py --held-out --scenes 340 --out data/test.npz --seed 4000000           # test
+```
 
-# 2. training (stage 1: each cable model alone; stage 2: both on the chained 6-s forecast)
-python train.py --train data/F_12000.npz --val data/val_designed.npz --out runs/F_12000
+* `--set A` to `--set F` chooses the robot motion kinds of a training set (A: one kind, F: eight kinds).
+* `--held-out` creates scenes with circular, sinusoidal and jerky robot motions. They are for validation and test only.
+* Use a different `--seed` for every file.
+* `--slim` leaves out the floor forces, which only the videos use. 12,000 scenes then take about 7 GB.
 
-# 3. evaluation on robot motions that never occur in training
+### 2. `train.py`: train the two cable models
+
+```bash
+python train.py --train data/train.npz --val data/val_designed.npz --out runs/F_12000
+```
+
+Writes `runs/F_12000/model_cable0.pt` (pulled cable) and `model_cable1.pt` (fixed cable). `--val` selects the
+checkpoints and must not be a held-out file. Training starts from random weights unless `--init` names a checkpoint.
+
+### 3. `evaluate.py`: measure the forecast error
+
+```bash
 python evaluate.py --models runs/F_12000/model_cable0.pt,runs/F_12000/model_cable1.pt --data data/test.npz
-
-# 4. video of one scene
-python make_videos.py --models runs/F_12000/model_cable0.pt,runs/F_12000/model_cable1.pt --data data/test.npz --index 3
+python evaluate.py --fit
 ```
 
-Every script explains its options with `--help`. A set of 12,000 scenes needs about 7 GB with `--slim`
-(without the floor forces, which only the videos use); training one set takes several hours on one GPU.
+The first command prints the mean node error of the 6-s forecast in cm, in total and per robot motion.
+`--fit` fits the scaling law to the results of the paper.
 
-## Training sets and held-out motions
+### 4. `make_videos.py`: render videos
 
-Every set contains its robot motion kinds in equal shares.
-
-| Set | Motion kinds | Robot motions |
-|---|---|---|
-| A | 1 | designed patterns (straight, angled, arc, S-curve, there and back, free swing) |
-| B | 2 | A + random waypoints |
-| C | 3 | B + spline curves |
-| D | 4 | C + varying speed |
-| E | 5 | D + retraced paths |
-| F | 8 | E + loops, weaving, bursts |
-
-Circular, sinusoidal and jerky robot motions are never training data: `simulate.py --set` cannot produce them, and
-`--held-out` produces only them. Checkpoints are selected on trained motions (`--val`), so the held-out validation
-and test scenes stay untouched during training. Unstable scenes and scenes in which the pulled cable winds around
-the fixed cable by more than one turn are dropped.
-
-## Results
-
-Mean node error of the 6-s forecast in cm on the held-out test motions (341 scenes), one training run per entry:
-
-| Training scenes | 371 | 743 | 1,486 | 2,971 | 6,000 | 12,000 | 24,000 |
-|---|---|---|---|---|---|---|---|
-| A (1 kind) | 5.26 | 4.53 | 4.10 | 3.67 | 3.48 | 3.32 | 3.42 |
-| B (2 kinds) | 4.65 | 3.94 | 3.43 | 3.18 | 2.86 | 2.77 | 2.75 |
-| C (3 kinds) | | | | | | 2.68 | |
-| D (4 kinds) | | | | | | 2.52 | |
-| E (5 kinds) | | | | | | 2.50 | |
-| F (8 kinds) | 3.80 | 3.47 | 3.16 | 2.66 | 2.47 | 2.33 | 2.22 |
-
-Scaling law for N training scenes with k motion kinds, fitted to these 24 runs (`python evaluate.py --fit`):
-
-```
-E(N, k) = a k^-beta + c (N / 1000)^-gamma      a = 2.93 cm, beta = 0.21, c = 1.29 cm, gamma = 0.50      R2 = 0.98
+```bash
+python make_videos.py --models runs/F_12000/model_cable0.pt,runs/F_12000/model_cable1.pt --data data/test.npz --index 3 --out videos
+python make_videos.py --grid videos/tiles --rows 5 --cols 5 --out videos/grid.mp4
 ```
 
-More scenes of the same kinds reduce the error only down to a floor, and this floor falls with every motion kind
-that is added.
+The first command renders scene 3 of the file (simulation dark, forecast orange). For a file created with `--slim`
+the floor contact of the simulation is not drawn. The second command arranges the videos of a folder in a grid;
+render those with `--plain --margin 0.12`.
 
-## Notes on reproduction
+### `model.py`
 
-* This repository is a compact version of the research code. The simulation, the model and the training
-  procedure are the same; the command line and the random seeds of the scenes differ, so regenerated data sets
-  contain other scenes than the ones behind the table above.
-* The models of the table started stage 1 from a transformer pretrained on single cables. That checkpoint and its
-  training code are not part of this repository; `train.py` starts from random weights unless `--init` is given.
-  Results from random initialization have not been measured.
-* All results are from simulation.
+The model itself. It is imported by the other scripts and is not run directly.
 
 ## License
 
