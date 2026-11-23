@@ -18,47 +18,7 @@ import torch.nn as nn
 from dataclasses import asdict
 from dataclasses import dataclass
 from torch.utils.data import Dataset
-
-
-# Material parameter ranges (sampled log-uniformly for stiffness/density, uniformly otherwise).
-# Names are the order used in the data arrays and in the model's material tokens.
-MATERIAL_NAMES = ["bend", "twist", "damping", "density", "length", "height"]
-MATERIAL_DEFAULTS = {"length": 1.3153, "height": 0.5}   # used for files without these two columns
-MATERIAL_RANGES = {
-    "bend":     (5e3, 5e6, "log"),    # cable plugin `bend` [Pa]; floppy rope .. visibly stiff
-    "twist":    (1e3, 1e6, "log"),    # cable plugin `twist` [Pa]
-    "damping":  (0.001, 0.08, "log"), # joint damping [N m s/rad]; main lever for the "stiff / viscous" look
-    "density":  (300.0, 4000.0, "log"),  # capsule density [kg/m^3]
-    "length":   (0.6, 2.0, "lin"),    # cable length [m]; 40 segments always
-    "height":   (0.2, 0.9, "lin"),    # hand height above the plane [m]
-}
-
-
-def pad_material(vec: np.ndarray) -> np.ndarray:
-    """Datasets written before length/height were parameters have 4 material columns; append
-    the fixed values they were generated with."""
-    vec = np.asarray(vec, dtype=np.float32)
-    if vec.shape[-1] == len(MATERIAL_NAMES):
-        return vec
-    extra = np.array([MATERIAL_DEFAULTS[k] for k in MATERIAL_NAMES[vec.shape[-1]:]], np.float32)
-    return np.concatenate([vec, np.broadcast_to(extra, vec.shape[:-1] + extra.shape)], axis=-1)
-
-
-def material_dict(vec) -> dict:
-    return dict(zip(MATERIAL_NAMES, map(float, pad_material(np.asarray(vec)))))
-
-
-def normalize_material(vec: np.ndarray) -> np.ndarray:
-    """Map raw material values to roughly [-1, 1] (log scale for log-sampled params)."""
-    vec = np.asarray(vec, dtype=np.float64)
-    out = np.empty_like(vec)
-    for i, k in enumerate(MATERIAL_NAMES):
-        lo, hi, kind = MATERIAL_RANGES[k]
-        if kind == "log":
-            out[..., i] = 2 * (np.log(vec[..., i]) - np.log(lo)) / (np.log(hi) - np.log(lo)) - 1
-        else:
-            out[..., i] = 2 * (vec[..., i] - lo) / (hi - lo) - 1
-    return out.astype(np.float32)
+from simulate import normalize_material
 
 
 @dataclass
@@ -429,7 +389,7 @@ class SceneWindows(Dataset):
         d = np.load(path)
         n = subset or len(d["mode"])
         self.pos, self.pose, self.action = d["pos"][:n], d["pose"][:n], d["action"][:n]
-        self.material = pad_material(d["material"][:n])
+        self.material = d["material"][:n]
         fc = d["force_cable"][:n] if "force_cable" in d else d["force"][:n]
         self.touch = np.abs(fc).sum((1, 3, 4)) > 0                           # (E,T) cable-cable contact
         self.mode = d["mode"][:n]

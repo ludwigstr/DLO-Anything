@@ -26,7 +26,6 @@ import time
 import torch
 from dataclasses import dataclass
 from multiprocessing import Pool
-from model import MATERIAL_NAMES, MATERIAL_RANGES, closest_on_cable
 
 
 @dataclass
@@ -77,6 +76,18 @@ class SimConfig:
     def substeps(self) -> int:
         return int(round(self.control_dt / self.timestep))
 
+# Material parameter ranges (sampled log-uniformly for stiffness/density, uniformly otherwise).
+# Names are the order used in the data arrays and in the model's material tokens.
+MATERIAL_NAMES = ["bend", "twist", "damping", "density", "length", "height"]
+MATERIAL_RANGES = {
+    "bend":     (5e3, 5e6, "log"),    # cable plugin `bend` [Pa]; floppy rope .. visibly stiff
+    "twist":    (1e3, 1e6, "log"),    # cable plugin `twist` [Pa]
+    "damping":  (0.001, 0.08, "log"), # joint damping [N m s/rad]; main lever for the "stiff / viscous" look
+    "density":  (300.0, 4000.0, "log"),  # capsule density [kg/m^3]
+    "length":   (0.6, 2.0, "lin"),    # cable length [m]; 40 segments always
+    "height":   (0.2, 0.9, "lin"),    # hand height above the plane [m]
+}
+
 
 def sample_material(rng: np.random.Generator) -> dict:
     out = {}
@@ -91,6 +102,23 @@ def sample_material(rng: np.random.Generator) -> dict:
 
 def material_to_vec(mat: dict) -> np.ndarray:
     return np.array([mat[k] for k in MATERIAL_NAMES], dtype=np.float32)
+
+
+def material_dict(vec) -> dict:
+    return dict(zip(MATERIAL_NAMES, map(float, np.asarray(vec))))
+
+
+def normalize_material(vec: np.ndarray) -> np.ndarray:
+    """Map raw material values to roughly [-1, 1] (log scale for log-sampled params)."""
+    vec = np.asarray(vec, dtype=np.float64)
+    out = np.empty_like(vec)
+    for i, k in enumerate(MATERIAL_NAMES):
+        lo, hi, kind = MATERIAL_RANGES[k]
+        if kind == "log":
+            out[..., i] = 2 * (np.log(vec[..., i]) - np.log(lo)) / (np.log(hi) - np.log(lo)) - 1
+        else:
+            out[..., i] = 2 * (vec[..., i] - lo) / (hi - lo) - 1
+    return out.astype(np.float32)
 
 
 def yaw_to_quat(yaw: float) -> np.ndarray:
@@ -824,6 +852,7 @@ def winding(pos, near=0.03):
     """How far the pulled cable winds around the U [deg]. pos (2,T,N,3). Nodes of the pulled cable within `near` of the U:
     their position relative to the closest point on the U, projected onto the plane normal to the U, sweeps an angle along
     the run of consecutive close nodes. Lying over the U gives up to about 180 degrees, a wrap clearly more."""
+    from model import closest_on_cable                      # imported here: model.py itself imports the material definitions of this file
     p = torch.as_tensor(np.asarray(pos), dtype=torch.float32); p0, p1 = p[0], p[1]
     q, arc, gap, i, ti = closest_on_cable(p0, p1)
     seg = p1[:, 1:] - p1[:, :-1]
