@@ -16,8 +16,9 @@ import os
 import time
 import torch
 import torch.nn.functional as F
+from dataclasses import asdict
 from torch.utils.data import DataLoader
-from model import ModelConfig, POS_SCALE, PhysicsTransformer, SceneWindows, asdict_safe, load, own_in, predict, rigid_in
+from model import ModelConfig, POS_SCALE, PhysicsTransformer, SceneWindows, load, own_in, predict, rigid_in
 
 
 def chain(models, bb, W, detach):
@@ -85,7 +86,7 @@ def stage1(args, dev, cable):
             v = validate({cable: model}, va, dev, 1, (cable,))
             print(f"  step {step} train_mse {run / every:.5f} | validation {v:.2f} cm | {time.time() - t0:.0f}s", flush=True); run = 0.0
             if v < best:
-                best = v; torch.save({"model": model.state_dict(), "cfg": asdict_safe(mcfg)}, path)
+                best = v; torch.save({"model": model.state_dict(), "cfg": asdict(mcfg)}, path)
         if step >= args.steps1:
             break
     return path
@@ -100,7 +101,7 @@ def stage2(args, dev, paths):
 
     def save():
         for c, m in enumerate(models):
-            torch.save({"model": m.state_dict(), "cfg": asdict_safe(mcfg)}, os.path.join(args.out, f"model_cable{c}.pt"))
+            torch.save({"model": m.state_dict(), "cfg": asdict(mcfg)}, os.path.join(args.out, f"model_cable{c}.pt"))
 
     best, run, t0, every = validate(dict(enumerate(models)), va, dev, W), 0.0, time.time(), max(1, min(500, args.steps2 // 4))
     print(f"stage 2: {W * mcfg.horizon * 0.02:.0f}-s chain, validation at the start {best:.2f} cm", flush=True); save()

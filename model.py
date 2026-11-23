@@ -15,7 +15,6 @@ from __future__ import annotations
 import numpy as np
 import torch
 import torch.nn as nn
-from dataclasses import asdict
 from dataclasses import dataclass
 from torch.utils.data import Dataset
 from simulate import SimConfig, normalize_material
@@ -24,7 +23,7 @@ from simulate import SimConfig, normalize_material
 @dataclass
 class ModelConfig:
     context_len: int = 10      # past control steps given to the model
-    horizon: int = 100         # future control steps to predict
+    horizon: int = 25          # future control steps per prediction (0.5 s)
     d_model: int = 256
     n_heads: int = 8
     n_layers: int = 6
@@ -33,10 +32,6 @@ class ModelConfig:
     n_material: int = 6
     contact_in: int = 0           # feature size of the soft-contact tokens (0 = no contact tokens), one per cable node
     rigid_in: int = 0             # feature size of the rigid-contact tokens (0 = none): one floor patch below every node
-
-
-def asdict_safe(obj):
-    return asdict(obj)
 
 
 POS_SCALE = 1.0 / 0.5            # positions in hand frame are O(0.5 m) (1.3 m cable)
@@ -52,7 +47,7 @@ def rot2(yaw):
     return np.array([[c, -s], [s, c]])
 
 
-def make_sample(pos, pose, action, material, t0, K, H):
+def action_material_tokens(pose, action, material, t0, H):
     """Action and material tokens of one cable for the prediction that starts after step t0.
 
     pose (T, 3), action (T, 3), material (6,); actions = action[t0 .. t0+H-1]
@@ -82,7 +77,7 @@ class PhysicsTransformer(nn.Module):
         self.node_proj = nn.Linear(node_in, d)
         if cfg.contact_in:
             self.contact_proj = nn.Linear(cfg.contact_in, d)
-            self.contact_emb = nn.Parameter(torch.randn(cfg.n_nodes, d) * 0.02)   # index of the partner node
+            self.contact_emb = nn.Parameter(torch.randn(cfg.n_nodes, d) * 0.02)   # index of the cable node
             self.contact_type = nn.Parameter(torch.randn(d) * 0.02)
             self.act_partner_proj = nn.Linear(act_in, d)
             nn.init.zeros_(self.act_partner_proj.weight); nn.init.zeros_(self.act_partner_proj.bias)
@@ -97,7 +92,7 @@ class PhysicsTransformer(nn.Module):
         self.time_emb = nn.Parameter(torch.randn(cfg.horizon, d) * 0.02)
         self.global_proj = nn.Linear(global_in, d)
         self.type_emb = nn.Parameter(torch.randn(4, d) * 0.02)  # node / material / action / global
-        # "material unknown": replaces the material tokens of masked samples (inverse-head training)
+        # inverse head and "material unknown" embedding: part of the architecture, but not trained or used by train.py
         self.mat_unknown = nn.Parameter(torch.randn(cfg.n_material, d) * 0.02)
         # inverse head: pooled node tokens + global token -> the 6 normalised material parameters
         self.inv_head = nn.Sequential(nn.Linear(2 * d, 256), nn.GELU(), nn.Linear(256, cfg.n_material))
@@ -304,7 +299,7 @@ class SceneWindows(Dataset):
         n = subset or len(d["mode"])
         self.pos, self.pose, self.action = d["pos"][:n], d["pose"][:n], d["action"][:n]
         self.material = d["material"][:n]
-        fc = d["force_cable"][:n] if "force_cable" in d else d["force"][:n]
+        fc = d["force_cable"][:n]
         self.touch = np.abs(fc).sum((1, 3, 4)) > 0                           # (E,T) cable-cable contact
         self.mode = d["mode"][:n]
         self.K, self.H, self.W = mcfg.context_len, mcfg.horizon, n_windows
@@ -317,22 +312,15 @@ class SceneWindows(Dataset):
         n_in = cs[:, t0s + self.H * n_windows + 1] - cs[:, t0s + 1]
         self.contact_t0 = [t0s[n_in[e] > 0] for e in range(self.E)]
 
-    def groups(self):
-        """frei / nur Boden / einfach (one direction) / schwer (reversal)."""
-        any_touch = self.touch.any(1)
-        return np.array(["frei" if m == "free" else "nur Boden" if not c else "schwer" if m == "there_back" else "einfach"
-                         for m, c in zip(self.mode, any_touch)])
-
     def __len__(self):
         return self.E * self.spe
 
     def item(self, e, t0):
-        ss = [make_sample(self.pos[e, c], self.pose[e, c], self.action[e, c], self.material[e, c], t0, self.K, self.H) for c in (0, 1)]
+        ss = [action_material_tokens(self.pose[e, c], self.action[e, c], self.material[e, c], t0, self.H) for c in (0, 1)]
         sl = slice(t0 + 1, t0 + self.H + 1)
         return dict(act=torch.stack([s["act"] for s in ss]), mat=torch.stack([s["mat"] for s in ss]),
                     pose0=torch.from_numpy(self.pose[e, :, t0]), pose_fut=torch.from_numpy(self.pose[e, :, sl]),
-                    gt=torch.from_numpy(self.pos[e, :, sl]), fixed=torch.tensor([0.0, 1.0]),
-                    touch=torch.tensor(bool(self.touch[e, sl].any())))
+                    gt=torch.from_numpy(self.pos[e, :, sl]), fixed=torch.tensor([0.0, 1.0]))
 
     def __getitem__(self, idx):
         e = idx // self.spe
