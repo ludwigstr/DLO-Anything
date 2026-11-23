@@ -18,7 +18,7 @@ import torch.nn as nn
 from dataclasses import asdict
 from dataclasses import dataclass
 from torch.utils.data import Dataset
-from simulate import normalize_material
+from simulate import SimConfig, normalize_material
 
 
 @dataclass
@@ -31,11 +31,8 @@ class ModelConfig:
     dropout: float = 0.0
     n_nodes: int = 41             # cable nodes (SimConfig.n_segments + 1)
     n_material: int = 6
-    force: bool = False           # external per-node contact-force channel (context + future forces)
-    contact_in: int = 0           # feature size of the soft-contact tokens (0 = no contact tokens), see soft_contact.py
-    contact_fut_in: int = 0       # per-step contact features over the forecast horizon (0 = none), see soft_contact_iter.py
+    contact_in: int = 0           # feature size of the soft-contact tokens (0 = no contact tokens), one per cable node
     rigid_in: int = 0             # feature size of the rigid-contact tokens (0 = none): one floor patch below every node
-    residual_vel: bool = False    # one-step model: the network output is added to the constant-velocity extrapolation
 
 
 def asdict_safe(obj):
@@ -43,16 +40,11 @@ def asdict_safe(obj):
 
 
 POS_SCALE = 1.0 / 0.5            # positions in hand frame are O(0.5 m) (1.3 m cable)
-
-
-MAX_SPEED, CONTROL_DT, MAX_YAW_RATE = 1.0, 0.02, 2.0      # scales of the gripper motion: speed [m/s], control step [s], yaw rate [rad/s] (as in simulate.SimConfig)
-
-ACT_SCALE = np.array([1 / (MAX_SPEED * CONTROL_DT),
-                      1 / (MAX_SPEED * CONTROL_DT),
-                      1 / (MAX_YAW_RATE * CONTROL_DT)], np.float32)
-VEL_SCALE = 1 / (MAX_SPEED * CONTROL_DT)
-FORCE_SCALE = 1.0 / 0.05          # contact forces: median ~30 mN, p95 ~150 mN -> O(1); clipped at +-20
-FORCE_CLIP = 20.0
+_cfg = SimConfig()
+ACT_SCALE = np.array([1 / (_cfg.max_speed * _cfg.control_dt),
+                      1 / (_cfg.max_speed * _cfg.control_dt),
+                      1 / (_cfg.max_yaw_rate * _cfg.control_dt)], np.float32)
+VEL_SCALE = 1 / (_cfg.max_speed * _cfg.control_dt)
 
 
 def rot2(yaw):
@@ -67,21 +59,12 @@ def to_gripper_frame(pos, pose0):
     return out
 
 
-def force_to_frame(f, pose0):
-    """External forces (..., 3) world -> gripper frame (rotation only), scaled and clipped."""
-    out = np.array(f, dtype=np.float32, copy=True)
-    out[..., :2] = out[..., :2] @ rot2(pose0[2])
-    return np.clip(out * FORCE_SCALE, -FORCE_CLIP, FORCE_CLIP)
-
-
-def make_sample(pos, pose, action, material, t0, K, H, force=None):
+def make_sample(pos, pose, action, material, t0, K, H):
     """Build one model input/target from an episode.
 
-    pos (T, N, 3), pose (T, 3), action (T, 3), material (6,), force (T, N, 3) [N] or None
+    pos (T, N, 3), pose (T, 3), action (T, 3), material (6,)
     context = steps t0-K+1 .. t0, target = steps t0+1 .. t0+H, actions = action[t0 .. t0+H-1]
-    Everything is expressed in the gripper frame at t0. With `force`, the sample also carries
-    force_ctx (N, K*3): forces on each node over the context steps, and force_fut (H, N, 3):
-    forces over the target steps (teacher forcing of the contact channel); without it both are 0.
+    Everything is expressed in the gripper frame at t0.
     """
     pose0 = pose[t0]
     ctx = to_gripper_frame(pos[t0 - K + 1:t0 + 1], pose0)            # (K, N, 3)
@@ -100,21 +83,12 @@ def make_sample(pos, pose, action, material, t0, K, H, force=None):
 
     target = to_gripper_frame(pos[t0 + 1:t0 + H + 1], pose0) * POS_SCALE   # (H, N, 3)
     cur = ctx[-1] * POS_SCALE                                              # (N, 3)
-    N = pos.shape[1]
-    if force is None:
-        f_ctx = np.zeros((N, K * 3), np.float32)
-        f_fut = np.zeros((H, N, 3), np.float32)
-    else:
-        f_ctx = force_to_frame(force[t0 - K + 1:t0 + 1], pose0).transpose(1, 0, 2).reshape(N, K * 3)
-        f_fut = force_to_frame(force[t0 + 1:t0 + H + 1], pose0)
     return dict(
         node=torch.from_numpy(node_feat.astype(np.float32)),
         act=torch.from_numpy(act_feat.astype(np.float32)),
         mat=torch.from_numpy(normalize_material(material)),
         cur=torch.from_numpy(cur.astype(np.float32)),
         target=torch.from_numpy(target.astype(np.float32)),
-        force_ctx=torch.from_numpy(f_ctx.astype(np.float32)),
-        force_fut=torch.from_numpy(f_fut.astype(np.float32)),
     )
 
 
@@ -124,22 +98,12 @@ class PhysicsTransformer(nn.Module):
         self.cfg = cfg
         d = cfg.d_model
         self.node_proj = nn.Linear(node_in, d)
-        if cfg.force:
-            self.node_force_proj = nn.Linear(cfg.context_len * 3, d)
-            self.act_force_proj = nn.Linear(cfg.n_nodes * 3, d)
-            self.dec_force = nn.Linear(3, 128)
-            for lin in (self.node_force_proj, self.act_force_proj, self.dec_force):
-                nn.init.zeros_(lin.weight); nn.init.zeros_(lin.bias)
         if cfg.contact_in:
             self.contact_proj = nn.Linear(cfg.contact_in, d)
             self.contact_emb = nn.Parameter(torch.randn(cfg.n_nodes, d) * 0.02)   # index of the partner node
             self.contact_type = nn.Parameter(torch.randn(d) * 0.02)
             self.act_partner_proj = nn.Linear(act_in, d)
             nn.init.zeros_(self.act_partner_proj.weight); nn.init.zeros_(self.act_partner_proj.bias)
-        if getattr(cfg, "contact_fut_in", 0):
-            # per-step contact over the horizon, built from the predicted motion of both cables (soft_contact_iter.py)
-            self.contact_fut_proj = nn.Linear(cfg.contact_fut_in, d)
-            nn.init.zeros_(self.contact_fut_proj.weight); nn.init.zeros_(self.contact_fut_proj.bias)
         if cfg.rigid_in:
             self.rigid_proj = nn.Linear(cfg.rigid_in, d)
             self.rigid_emb = nn.Parameter(torch.randn(cfg.n_nodes, d) * 0.02)     # index of the node above the patch
@@ -170,16 +134,12 @@ class PhysicsTransformer(nn.Module):
         nn.init.zeros_(self.dec_mlp[-1].weight)
         nn.init.zeros_(self.dec_mlp[-1].bias)
 
-    def forward(self, node, act, mat, cur, glob=None, mat_mask=None, return_inv=False,
-                force_ctx=None, force_fut=None, contact=None, act_partner=None, rigid=None, contact_fut=None):
+    def forward(self, node, act, mat, cur, glob=None, mat_mask=None, return_inv=False, contact=None, act_partner=None, rigid=None):
         """node (B,N,F)  act (B,H,7)  mat (B,M)  cur (B,N,3) -> pred positions (B,H,N,3)
 
         mat_mask (B,) bool: samples whose material tokens are replaced by the "unknown" embedding.
         return_inv: also return the inverse head's material estimate (B,M) from the context.
-        force_ctx (B,N,K*3): external force on every node over the context steps (hand frame, scaled)
-        force_fut (B,H,N,3): external force on every node over the future steps (same units)
-        Both are optional; None means no external force (the single-cable case).
-        contact (B,P,cfg.contact_in): soft-contact tokens, one per partner node; None = no partner.
+        contact (B,P,cfg.contact_in): soft-contact tokens, one per cable node; None = no partner.
         act_partner (B,H,7): planned hand motion of the partner in the own frame.
         rigid (B,R,cfg.rigid_in): rigid-contact tokens, one per patch of a rigid surface (the floor).
         """
@@ -192,18 +152,12 @@ class PhysicsTransformer(nn.Module):
         if mat_mask is not None:
             tm = torch.where(mat_mask[:, None, None], (self.mat_unknown + self.type_emb[1])[None].expand_as(tm), tm)
         ta = self.act_proj(act) + self.time_emb[None, :H] + self.type_emb[2]
-        if self.cfg.force and force_ctx is not None:
-            tn = tn + self.node_force_proj(force_ctx)
-        if self.cfg.force and force_fut is not None:
-            ta = ta + self.act_force_proj(force_fut.reshape(B, H, N * 3))
         tg = (self.global_proj(glob) + self.type_emb[3])[:, None]
         toks = [tn, tm, ta]
         if self.cfg.contact_in and contact is not None:
             if act_partner is not None:
                 toks[2] = ta + self.act_partner_proj(act_partner)
             tc = self.contact_proj(contact) + self.contact_emb[None, :contact.shape[1]] + self.contact_type
-            if contact_fut is not None and getattr(self.cfg, "contact_fut_in", 0):
-                tc = tc + self.contact_fut_proj(contact_fut)
             toks.append(tc)
         if self.cfg.rigid_in and rigid is not None:
             toks.append(self.rigid_proj(rigid) + self.rigid_emb[None, :rigid.shape[1]] + self.rigid_type)
@@ -214,8 +168,6 @@ class PhysicsTransformer(nn.Module):
         a = self.dec_t(ha)[:, :, None, :].expand(B, H, N, -1)
         n = self.dec_n(hn)[:, None, :, :].expand(B, H, N, -1)
         an = a * n
-        if self.cfg.force and force_fut is not None:
-            an = an + self.dec_force(force_fut)
         disp = self.dec_mlp(torch.cat([an, a, n], dim=-1))
         pred = cur[:, None] + disp
         if return_inv:
@@ -376,8 +328,6 @@ def predict(models, ctx, b, use_contact=True, cables=(0, 1), amp=None):
         y = y.float() / POS_SCALE
         t = torch.cat([b["pose0"][:, c, :2], torch.zeros_like(b["pose0"][:, c, :1])], -1)[:, None, None]
         y = from_frame(y, b["pose0"][:, c, 2][:, None, None]) + t
-        if getattr(models[c].cfg, "residual_vel", False):
-            y = y + (ctx[:, c, -1] - ctx[:, c, -2])[:, None]
         out.append(y)
     return torch.stack(out, 1)
 
@@ -435,7 +385,7 @@ class SceneWindows(Dataset):
 
 def load(path, device):
     ck = torch.load(path, map_location=device)
-    mcfg = ModelConfig(**ck["cfg"])
+    mcfg = ModelConfig(**{k: v for k, v in ck["cfg"].items() if k in ModelConfig.__dataclass_fields__})
     model = PhysicsTransformer(mcfg, node_in=mcfg.context_len * 6).to(device)
     model.load_state_dict(ck["model"]); model.eval()
     return model, mcfg
